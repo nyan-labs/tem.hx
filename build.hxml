@@ -1,0 +1,7 @@
+--dce no
+-cp src
+-main Tem
+
+-D no-deprecation-warnings
+
+--interp

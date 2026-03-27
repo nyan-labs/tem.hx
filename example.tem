@@ -1,0 +1,26 @@
+{% needs { name: String, meow: Number } %} 
+
+<!DOCTYPE html>
+<html 
+{% #if flag %}
+  flag="true"
+{% #endif %}
+>
+  <head></head>
+  <body>
+    {% for i in 0..8 %}
+      {{ i }}: {{ $type(i) }}
+    {% endfor %}
+
+    {% switch name %}
+      {% case "meow" %} woa {% endcase %}
+      {% case "maow" %} bwao {% endcase %}
+    {% endswitch %}
+
+    <h1>hi {{ name }}</h1>
+
+    {@component} 
+      {:slot awa}meow{/slot}
+    {/component}
+  </body>
+</html>

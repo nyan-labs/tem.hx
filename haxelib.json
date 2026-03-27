@@ -1,0 +1,13 @@
+{
+  "name": "tem.hx",
+  "url" : "https://github.com/nyan-labs/tem.hx/",
+  "license": "GPL",
+  "tags": ["template"],
+  "description": "tem-plating engine",
+  "version": "0.0.1",
+  "classPath": "src/",
+  "releasenote": "null",
+  "contributors": ["qzipp"],
+  "dependencies": {},
+  "main": "src.Tem"
+}
