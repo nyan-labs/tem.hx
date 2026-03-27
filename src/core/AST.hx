@@ -34,5 +34,5 @@ enum Statement {
   SIf(condition: Expr, body: Array<Statement>, else_body: Null<Array<Statement>>);
   SFor(items: Expr, item: String, body: Array<Statement>);
 
-	SExpr(expr: Expr);
+  SExpr(expr: Expr);
 }
