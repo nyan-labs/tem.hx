@@ -2,6 +2,10 @@
 -cp src
 -main Tem
 
+-lib dox
+
 -D no-deprecation-warnings
+
+--resource assets/locales.json@locales
 
 --interp

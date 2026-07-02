@@ -1,6 +1,8 @@
 package core;
 
 enum Keyword {
+  KImport;
+
   KTrue;
   KFalse;
   KNull;
@@ -13,40 +15,38 @@ enum Keyword {
   KIf;
   KElse;
   KFor;
-
+  
   KIn;
-
+  
   KSwitch;
   KCase;
   
   KEnd(keyword: Keyword);
+  KInner(keyword: Keyword);
 }
 
 final keywords = [
+  "import" => KImport,
+
   "true" => KTrue,
   "false" => KFalse,
   "null" => KNull,
 
   "var" => KVar,
-  "endvar" => KEnd(KVar),
   "final" => KFinal,
-  "endfinal" => KEnd(KFinal),
 
   "function" => KFunction,
-  "endfunction" => KEnd(KFunction),
-  "func" => KFunction,
-  "endfunc" => KEnd(KFunction),
+  // "func" => KFunction,
+  // "endfunc" => KEnd(KFunction),
 
   "if" => KIf,
   "else" => KElse,
-  "endif" => KEnd(KIf),
   "for" => KFor,
-  "endfor" => KEnd(KFor),
 
   "switch" => KSwitch,
   "case" => KCase,
 
-  "in" => KIn
+  "in" => KIn,
 ];
 
 enum Operator {
@@ -56,7 +56,7 @@ enum Operator {
   OLess; // <
   OGreater; // >
   OLessEqual; // <=
-  OGresterEqual; // >=
+  OGreaterEqual; // >=
 
   OIncrement; // ++
   ODecrement; // --
@@ -73,11 +73,16 @@ enum Operator {
   OOr; // ||
 }
 
+enum StringKind {
+  SKRaw;
+  SKQuote;
+}
+
 enum Token {
   TNull;
   TBool(bool: Bool);
   TNumber(number: Float);
-  TString(string: String);
+  TString(string: String, kind: StringKind);
 
   TIdentifier(name: String);
 
@@ -85,14 +90,16 @@ enum Token {
 
   TKeyword(keyword: Keyword);
 
-  TOut(out: Token);
+  // TOutput(token: Token);
 
+  TAt; // @
   TDot; // .
   TComma; // ,
   TColon; // :
-  TRange; // ..
+  TRange; // ...
   TArrow; // ->
   TMapArrow; // =>
+  TVerticalBar; // |
   
   TLeftParentheses; // (
   TRightParentheses; // )
@@ -100,6 +107,7 @@ enum Token {
   TRightBrace; // }
   TLeftBracket; // [
   TRightBracket; // ]
+  TSemiColon; // ;
 
   TNewline;
   TEoF;
@@ -107,7 +115,11 @@ enum Token {
 
 typedef TokenPos = {
   token: Token,
+  pos: Position
+}
 
-	line: Int,
-	column: Int
+typedef Position = {
+  final name: String;
+  final line: Int;
+  final column: Int;
 }

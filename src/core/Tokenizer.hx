@@ -1,5 +1,6 @@
 package core;
 
+import core.Tokens.Position;
 import core.Tokens.Keyword;
 import core.Tokens.keywords;
 import core.Tokens.Token;
@@ -8,10 +9,21 @@ import core.Tokens.TokenPos;
 using StringTools;
 
 enum State {
-  SNone;
-  SStartTag;
-  SEndTag;
+  Output;
+  
+  Tag(op: TagOperator);
 }
+
+enum abstract TagOperator(String) to String {
+  var OUTPUT = "";
+
+  var META = "@";
+  var START = "#";
+  var INNER = ":";
+  var END = "/";
+}
+
+typedef TokenizerConfig = {}; 
 
 // heavily inspired from: https://github.com/Kitsumizy/NxScript/blob/main/src/nx/script/Tokenizer.hx
 class Tokenizer {
@@ -19,7 +31,7 @@ class Tokenizer {
 
   final LINE_ENDING = "\n";
 
-  public function new(data: String) {
+  public function new(data: String, config: TokenizerConfig = null) {
     this.data = data;
 
     // windows line-endings
@@ -30,6 +42,14 @@ class Tokenizer {
   var col: Int = 0;
   var line: Int = 1;
 
+  inline function position(): Position {
+    return {
+      name: "?",
+      line: line,
+      column: col
+    }
+  }
+
   var pos: Int = 0;
 
   var queue: Array<TokenPos> = new Array();
@@ -38,8 +58,7 @@ class Tokenizer {
     var tokens: Array<TokenPos> = new Array();
 
     while(!is_eof()) {
-      final start_line = line;
-      final start_column = col;
+      final start_pos = position();
 
       final token = next_token();
       if(token == null) {
@@ -51,83 +70,81 @@ class Tokenizer {
 
         continue;
       } else {
-        tokens.push({token: token, line: start_line, column: start_column});
+        tokens.push({
+          token: token,
+          pos: start_pos
+        });
       }
     }
 
-    tokens.push({token: TEoF, line: line, column: col});
+    tokens.push({
+      token: TEoF, 
+      pos: position()
+    });
 
     return tokens;
   }
 
-  var state: State = SNone;
+  var state: State = Output;
 
   function check_state() {
-    trace('state ($state) check peek ${peek()}; ${peek_next()}');
+    // trace('state ($state) check; peek ${peek()}; ${peek_next()}');
     switch state {
-      case SNone:
-        if(is_starting_tag(false)) {
+      case Output:
+        // switch case? somehow?
+        if(is_tag(START, false)) {
           advance();
           advance();
           skip_whitespace();
 
-          state = SStartTag;
-        }
-        else if(is_ending_tag(false)) {
-          trace("END");
+          state = Tag(START);
+        } else if(is_tag(META, false)) {
+          advance();
+          skip_whitespace();
+
+          state = Tag(META);
+        } else if(is_tag(INNER, false)) {
           advance();
           advance();
           skip_whitespace();
 
-          state = SEndTag;
+          state = Tag(INNER);
+        } else if(is_tag(END, false)) {
+          advance();
+          advance();
+          skip_whitespace();
+
+          state = Tag(END);
+        } else if(is_tag(OUTPUT, false)) {
+          advance();
+          skip_whitespace();
+
+          state = Tag(OUTPUT);
         }
 
-      case SStartTag:
-        if(is_starting_tag(true)) {
-          advance();
-          state = SNone;
-        }
 
-      case SEndTag:
-        if(is_ending_tag(true)) {
+      case Tag(op):
+        if(is_tag(op, true)) {
           advance();
-          state = SNone;
+          state = Output;
         }
     }
 
     return state;
   }
 
-  // {#tag {}}; {:tag}; {/tag}
-  function is_starting_tag(check_end: Bool = false) {
+  
+  function is_tag(op: TagOperator, check_end: Bool = false) {
     if(check_end)
       if(peek() == "}") {
         return true;
       }
-
-    // todo
-    return peek() == "{" && (peek_next() == "#" || peek_next() == "@");
-  }
-
-  function is_ending_tag(check_end: Bool = false) {
-    if(check_end)
-      return peek() == "}";
-
-    // todo
-    return peek() == "{" && peek_next() == "/";
-  }
-
-  // {{ delimiter }} (TOOOOODOOOOOOOOOOOOOOOOOOOOOOO)
-  function is_delimiter_output(check_end: Bool = false) {
-    // %}
-    if(check_end)
-      return peek() == "}" && peek_next() == "}";
-
-    // {%
-    return peek() == "{" && peek_next() == "{";
+  
+    return peek() == "{" && (peek_next() == op || op == OUTPUT);
   }
 
   function parse_inner_tag() {
+    trace(peek());
     if(peek() == '\n') {
       advance();
 
@@ -156,47 +173,93 @@ class Tokenizer {
 
     // trace("cursor ", pos, col, peek());
 
-    skip_whitespace();
-
     switch check_state() {
-      case SStartTag:
-        // ugly but it works
-        var end_i = 0; // }
-        var start_i = 0; // {
+      case Tag(META):
+        var depth = 0;
 
-        do {
+        while(!is_eof()) {
           skip_whitespace();
 
-          var start_line = line;
-          var start_column = col;
+          if(is_whitespace(peek()) || peek() == "#")
+            break;
 
+          var start_pos = position();
+            
           var token = parse_inner_tag();
+          switch token {
+            case TLeftBrace: depth++;
+            case TRightBrace: depth--;
 
-          // this exists for edge cases like {#var obj = {}},
-          // where the first right brace ends up ending the tag
-          if(token == TLeftBrace) {
-            start_i++;
-          } else if(token == TRightBrace) {
-            end_i++;
-
-            if(!(start_i >= end_i))
-              break;
+            case _: null;
           }
-
-          queue.push({token: token, line: start_line, column: start_column});
-        }while(start_i >= end_i);
-
-        state = SNone;
+          
+          if(depth <= -1)
+            break;
+          
+          queue.push({
+            token: token, 
+            pos: start_pos
+          });
+          
+          if(is_eof()) break;
+        }
+        
+        if(peek() == "#") {
+          advance();
+          state = Tag(START);
+        } else
+          state = Tag(OUTPUT);
 
         return null;
 
-      case SEndTag:
+      case Tag(START), Tag(INNER):
+        var depth = 0;
+
+        while(!is_eof()) {
+          skip_whitespace();
+
+          var start_pos = position();
+
+          // fiiiiiiiix
+          // bracketss pair it upppp somehowww
+          // if(peek() == "{" && peek() == find) {
+          //   var token = parse_inner_tag();
+          //   queue.push({token: token, line: start_line, column: start_column});
+
+          //   aaa("}");
+          // } else if(find == "}") {            
+            // }
+            
+          var token = parse_inner_tag();
+          switch token {
+            case TLeftBrace: depth++;
+            case TRightBrace: depth--;
+
+            case _: null;
+          }
+          
+          if(depth <= -1)
+            break;
+          
+          queue.push({
+            token: token, 
+            pos: start_pos
+          });
+          
+          if(is_eof()) break;
+        }
+
+        state = Output;
+
+        return null;
+
+      case Tag(END):
         if(is_identifier(peek())) {
           var content = "";
 
           skip_whitespace();
 
-          while(!is_eof() && check_state().match(SEndTag)) {
+          while(!is_eof() && check_state().match(Tag(END))) {
             if(!is_identifier(peek())) {
               break;
             }
@@ -210,30 +273,64 @@ class Tokenizer {
 
           var keyword = keywords.get(content);
           if(keyword == null)
-            throw "invalid closing tag";
+            throw 'invalid closing tag `$content`';
 
           return TKeyword(KEnd(keyword));
         } else {
-          throw "invalid closing tag";
+          throw 'invalid closing tag';
         }
 
-      case SNone:
+      case Tag(OUTPUT):
+        var depth = 0;
+
+        while(!is_eof()) {
+          skip_whitespace();
+
+          var start_pos = position();
+          
+          var token = parse_inner_tag();
+          if(token == TLeftBrace)
+            depth++;
+          else if(token == TRightBrace)
+            depth--;
+
+          if(depth <= -1)
+            break;
+
+          queue.push({
+            token: token, 
+            pos: start_pos
+          });
+        }
+
+        state = Output;
+
+        return null;
+
+      case Output:
         var output = "";
-        while(check_state().match(SNone) && !is_eof()) {
+
+        while(!is_eof()) {
           if(peek() == "\n") {
             line++;
             col = 0;
+          }
+          //escape
+          if(peek() == '\\') {
+            advance();
           }
 
           output += peek();
 
           advance();
+          
+          if(!check_state().match(Output))
+            break;
         }
 
         if(output.length > 0)
-          return TOut(TString(output));
-        else
-          return null;
+          return TString(output, SKRaw);
+        else return null;
 
       case state:
         throw 'unparsed state `$state`';
@@ -291,7 +388,7 @@ class Tokenizer {
 
     advance(); // ending quote
 
-    return TString(str);
+    return TString(str, SKQuote);
   }
 
   inline function is_number(c: String, cn: String)
@@ -324,14 +421,14 @@ class Tokenizer {
   }
 
   inline function is_identifier(c: String)
-    return is_alphanumeric(c) || ["_", "$", "@"].contains(c);
+    return is_alphanumeric(c) || ["_", "$"].contains(c);
 
   function read_identifiers(): Null<Token> {
     var content = "";
 
     skip_whitespace();
 
-    while(!is_eof() && !is_starting_tag(true)) {
+    while(!is_eof()) {
       if(!is_identifier(peek())) {
         break;
       }
@@ -356,7 +453,10 @@ class Tokenizer {
           return TNull;
 
         case _:
-          return TKeyword(keyword);
+          return switch state {
+            case Tag(INNER): TKeyword(KInner(keyword));
+            case _: TKeyword(keyword);
+          };
       }
 
     return TIdentifier(content);
@@ -368,6 +468,8 @@ class Tokenizer {
     advance();
 
     switch (c) {
+      case ";":
+        return TSemiColon;
       case "(":
         return TLeftParentheses;
       case ")":
@@ -381,37 +483,55 @@ class Tokenizer {
       case "}":
         return TRightBrace;
 
+      case "-" if(peek() == ">"):
+        advance();
+        return TArrow;
+      case "=" if(peek() == ">"):
+        advance();
+        return TMapArrow;
+
+
+      case "@":
+        return TAt;
+
       case ":":
         return TColon;
       case ",":
         return TComma;
+      case "|":
+        return TVerticalBar;
+      case "." if(peek() == "." && peek_next() == "."):
+        advance();
+        advance();
+        return TRange;
       case ".":
-        if(peek() == ".") {
-          advance();
-          return TRange;
-        }
         return TDot;
 
-      case "=":
-        // ==
-        if(peek() == "=") {
-          advance();
-          return TOperator(OEqual);
-        }
+      case "^":
+        return TOperator(OPow);
 
+      case "!":
+        return TOperator(ONot);
+
+      case "=" if(peek() == "="):
+        advance();
+        return TOperator(OEqual);
+
+      case "=":
         return TOperator(OAssign);
 
+      case "+" if(peek() == "+"):
+        advance();
+        return TOperator(OIncrement);
+
       case "+":
-        if(peek() == "+") {
-          advance();
-          return TOperator(OIncrement);
-        }
         return TOperator(OAdd);
+      
+      case "-" if(peek() == "-"):
+        advance();
+        return TOperator(ODecrement);
+        
       case "-":
-        if(peek() == "-") {
-          advance();
-          return TOperator(ODecrement);
-        }
         return TOperator(OSubtract);
 
       case _:
@@ -444,7 +564,6 @@ class Tokenizer {
   }
 
   function advance() {
-    trace("am i getting called too many times?");
     col++;
     pos++;
 
